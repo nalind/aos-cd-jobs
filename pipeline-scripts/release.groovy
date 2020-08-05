@@ -1,6 +1,10 @@
 import groovy.json.*
 import java.net.URLEncoder
 import groovy.transform.Field
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.temporal.TemporalAdjusters
 
 buildlib = load("pipeline-scripts/buildlib.groovy")
 commonlib = buildlib.commonlib
@@ -304,16 +308,6 @@ def stageGetReleaseInfo(quay_url, release_tag){
     return res.stdout.trim()
 }
 
-def stageAdvisoryUpdate() {
-    // Waiting on new elliott features from Sam for this.
-    echo "Empty Stage"
-}
-
-def stageCrossRef() {
-    // cross ref tool not ready yet
-    echo "Empty Stage"
-}
-
 def stagePublishClient(quay_url, from_release_tag, release_name, arch, client_type) {
     def MIRROR_HOST = "use-mirror-upload.ops.rhcloud.com"
     def MIRROR_V4_BASE_DIR = "/srv/pub/openshift-v4"
@@ -450,6 +444,40 @@ def void sendReleaseCompleteMessage(Map release, int advisoryNumber, String advi
         echo "Message ID: ${sendResult.getMessageId()}"
         echo "Message content: ${sendResult.getMessageContent()}"
     }
+}
+
+def createAdvisoriesFor(ocpVersion) {
+    build(
+        job: "/build/advisories",
+        propagate: false,
+        parameters: [
+            string(name: "VERSION", value: ocpVersion),
+            string(name: "DATE",    value: determineNextReleaseDate(ocpVersion)),
+            string(name: "IMPETUS", value: "standard"),
+        ]
+    )
+}
+
+def determineNextReleaseDate(ocpVersion) {
+    def dayOfWeek
+    switch(ocpVersion) {
+        case "4.5":
+            dayOfWeek = DayOfWeek.MONDAY
+            break
+        case "4.4":
+            dayOfWeek = DayOfWeek.TUESDAY
+            break
+        default:
+            dayOfWeek = DayOfWeek.WEDNESDAY
+            break
+    }
+    return (
+        LocalDate.now()
+        .with(TemporalAdjusters.next(DayOfWeek.SUNDAY))     // assuming we don't work on weekends ;D
+        .with(TemporalAdjusters.next(dayOfWeek))
+        .with(TemporalAdjusters.next(dayOfWeek))            // 2 weeks from now
+        .format(DateTimeFormatter.ofPattern("yyyy-MMM-dd")) // format required by elliott
+    )
 }
 
 def signArtifacts(Map signingParams) {
