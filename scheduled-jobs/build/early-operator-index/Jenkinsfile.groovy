@@ -18,13 +18,15 @@ node {
     workDir = "${env.WORKSPACE}/doozer_working"
     sh "rm -rf ${workDir}"
 
-    // At the time of this writing cluster-nfd-operator builds cannot be added to the staging index
-    // because all builds of it are 1.0.0 and we cannot replace an existing version.
     // Note this logic will start to fail when versions of the operators start to be attached to
     // advisories and pushed to staging.
     def pullspecs = buildlib.doozer("-x cluster-nfd-operator --group=openshift-4.7 --working-dir=${workDir} olm-bundle:print " + '{bundle_pullspec}',
             [capture: true]).trim().split()
 
+    // At the time of this writing cluster-nfd-operator builds cannot be added to the staging index
+    // because all builds of it are 1.0.0 and we cannot replace an existing version.
+    pullspecs = pullspecs.findAll { !it.contains('nfd') }
+    
     request = [
         'bundles': pullspecs,
         'from_index': 'registry-proxy.engineering.redhat.com/rh-osbs/iib-pub-pending:v4.7'
@@ -48,7 +50,7 @@ node {
     for(int i = 0; i < 20; i++) { // IIB will take time to run
         sleep 60  // give IIB some time, then check in by trying to mirror
         try {
-            commonlib.shell("oc image mirror  --keep-manifest-list --filter-by-os='.*' registry-proxy.engineering.redhat.com/rh-osbs/iib:${id} quay.io/openshift-release-dev/ocp-release-nightly:iib-int-index-art-operators-4.7")
+            commonlib.shell("oc image mirror  --keep-manifest-list --filter-by-os='.*' registry-proxy.engineering.redhat.com/rh-osbs/iib:${job_id} quay.io/openshift-release-dev/ocp-release-nightly:iib-int-index-art-operators-4.7")
             echo "Successfully mirrored image!"
             break
         } catch (e) {
