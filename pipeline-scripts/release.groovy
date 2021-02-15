@@ -407,7 +407,7 @@ done
 function extract_opm() {
     OUTDIR=$1
     mkdir -p "${OUTDIR}"
-    OPERATOR_REGISTRY=$(oc adm release info --image-for operator-registry "$PULL_SPEC")
+    until OPERATOR_REGISTRY=$(oc adm release info --image-for operator-registry "$PULL_SPEC"); do sleep 10; done
     # extract opm binaries
     BINARIES=(opm)
     PLATFORMS=(linux)
@@ -418,15 +418,10 @@ function extract_opm() {
 
     MAJOR=$(echo "$VERSION" | cut -d . -f 1)
     MINOR=$(echo "$VERSION" | cut -d . -f 2)
-    if [ "$MAJOR" -eq 4 ] && [ "$MINOR" -le 6 ]; then
-        PREFIX=/usr/bin
-    else  # for 4.7+, opm binaries are at /usr/bin/registry/
-        PREFIX=/usr/bin/registry
-    fi
 
     PATH_ARGS=()
     for binary in ${BINARIES[@]}; do
-        PATH_ARGS+=(--path "$PREFIX/$binary:$OUTDIR")
+        PATH_ARGS+=(--path "/usr/bin/registry/$binary:$OUTDIR")
     done
 
     GOTRACEBACK=all oc -v5 image extract --confirm --only-files "${PATH_ARGS[@]}" -- "$OPERATOR_REGISTRY"
